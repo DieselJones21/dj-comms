@@ -7,9 +7,14 @@ author 'DieselJones21'
 description 'QBX community service: sweeping tasks, ox_target status ped, ox_inventory shop, and Discord logs'
 version '1.0.0'
 
+ox_libs {
+    'locale',
+}
+
 shared_scripts {
     '@ox_lib/init.lua',
     'config.lua',
+    'shared/init.lua',
 }
 
 client_scripts {
@@ -18,6 +23,10 @@ client_scripts {
 
 server_scripts {
     'server/main.lua',
+}
+
+files {
+    'locales/*.json',
 }
 
 dependencies {

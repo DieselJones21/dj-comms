@@ -2,7 +2,7 @@ Config = {}
 
 -- Discord webhook. Leave empty to disable logging.
 -- Logs when a player is sent to comms and when they finish.
-Config.Webhook = ''
+Config.Webhook = 'https://discord.com/api/webhooks/1551813937803038731/HtMNLMEtxyKMdxConydQU8OiPr69U09DmVFuJHr8rYYkZl83jqc7cK10B8t6B8Ao79Pe'
 
 -- Admin ACE group used by lib.addCommand
 Config.AdminGroup = 'group.admin'

@@ -15,7 +15,7 @@ Base QBX food/drink items (`sandwich`, `tosti`, `twerks_candy`, `snikkel_candy`,
 
 1. Drop this folder in your resources (for example `[standalone]/dj-comms`).
 2. Add `ensure dj-comms` to `server.cfg` **after** the dependencies above.
-3. Paste your Discord webhook into `Config.Webhook` in `config.lua`.
+3. Discord webhook is already set in `Config.Webhook`.
 4. Confirm the start / ped coords in `config.lua` sit where you want them in the plaza. Task and finish coords are the ones you provided.
 
 ## Commands
@@ -42,6 +42,20 @@ Base QBX food/drink items (`sandwich`, `tosti`, `twerks_candy`, `snikkel_candy`,
 - Progress is stored in player metadata, so reconnecting puts them back on comms.
 - Finishing (or `/removecomms`) teleports them to `237.15, -406.08, 47.92`.
 - Discord webhook logs sends and completions.
+
+## ox_lib
+
+This resource is built on ox_lib, not QB notify/menu/progress:
+
+- `lib.addCommand` for `/sendcomms`, `/removecomms`, `/checkcomms`
+- `lib.callback` for starting, cancelling, and completing sweeps
+- `lib.notify` for all player/admin messages
+- `lib.progressCircle` for the 12-second broom sweep
+- `lib.points` + `lib.showTextUI` for the **E** prompt
+- `lib.zones.sphere` to keep players in the comms area
+- `lib.registerContext` for the 3rd-eye progress menu
+- `lib.locale` via `locales/en.json` for all user-facing text
+- `cache.ped` / `cache.vehicle` for player entity access
 
 ## Exports
 

@@ -15,11 +15,12 @@ local statusPed
 local shopPed
 local pedsReady = false
 local rebuildTasks
+local commsZone
 
-local function notify(description, nType)
+local function notify(key, nType, ...)
     lib.notify({
-        title = 'Community Service',
-        description = description,
+        title = locale('notify_title'),
+        description = locale(key, ...),
         type = nType or 'inform',
         duration = 7000,
     })
@@ -59,31 +60,31 @@ end
 local function showStatusMenu()
     local data = lib.callback.await('dj-comms:server:getStatus', false)
     if not data or not data.active then
-        notify('You are not serving community service.', 'inform')
+        notify('error_not_serving_self', 'inform')
         return
     end
 
     lib.registerContext({
         id = 'dj_comms_status',
-        title = 'Community Service Progress',
+        title = locale('status_title'),
         options = {
             {
-                title = 'Tasks completed',
+                title = locale('status_completed'),
                 description = tostring(data.completed),
                 icon = 'check',
             },
             {
-                title = 'Tasks remaining',
+                title = locale('status_remaining'),
                 description = tostring(data.remaining),
                 icon = 'broom',
             },
             {
-                title = 'Total assigned',
+                title = locale('status_total'),
                 description = tostring(data.total),
                 icon = 'list',
             },
             {
-                title = 'Reason',
+                title = locale('status_reason'),
                 description = data.reason or 'n/a',
                 icon = 'gavel',
             },
@@ -109,7 +110,7 @@ local function setupPeds()
             {
                 name = 'dj_comms_status',
                 icon = 'fa-solid fa-clipboard-list',
-                label = 'Check community service',
+                label = locale('target_status'),
                 distance = 2.0,
                 onSelect = showStatusMenu,
             },
@@ -121,7 +122,7 @@ local function setupPeds()
             {
                 name = 'dj_comms_shop',
                 icon = 'fa-solid fa-basket-shopping',
-                label = 'Buy food and drinks',
+                label = locale('target_shop'),
                 distance = 2.0,
                 onSelect = openShop,
             },
@@ -173,7 +174,7 @@ local function startSweep(taskIndex)
 
     local allowed = lib.callback.await('dj-comms:server:startTask', false, taskIndex)
     if not allowed then
-        notify('You cannot start that task right now.', 'error')
+        notify('error_cannot_start', 'error')
         return
     end
 
@@ -185,7 +186,7 @@ local function startSweep(taskIndex)
 
     local success = lib.progressCircle({
         duration = Config.TaskDuration,
-        label = 'Sweeping the floor...',
+        label = locale('sweeping'),
         position = 'bottom',
         useWhileDead = false,
         canCancel = true,
@@ -211,7 +212,7 @@ local function startSweep(taskIndex)
     if not success then
         lib.callback.await('dj-comms:server:cancelTask', false)
         sweeping = false
-        notify('Sweep cancelled.', 'inform')
+        notify('sweep_cancelled', 'inform')
         return
     end
 
@@ -219,7 +220,7 @@ local function startSweep(taskIndex)
     sweeping = false
 
     if not result or not result.ok then
-        notify('That sweep did not count. Try again.', 'error')
+        notify('error_sweep_invalid', 'error')
         return
     end
 
@@ -232,7 +233,7 @@ local function startSweep(taskIndex)
     status.total = result.total
     status.reason = result.reason
     status.activeTasks = result.activeTasks
-    notify(('Floor swept. %s task(s) remaining.'):format(result.remaining), 'success')
+    notify('sweep_done', 'success', result.remaining)
     rebuildTasks()
 end
 
@@ -261,7 +262,7 @@ local function addTaskPoint(taskIndex)
         end,
         onEnter = function()
             if sweeping then return end
-            lib.showTextUI('[E] Sweep the floor')
+            lib.showTextUI(locale('sweep_prompt'))
         end,
         onExit = function()
             lib.hideTextUI()
@@ -300,6 +301,10 @@ local function teleportTo(coords)
 end
 
 local function insideZone()
+    if commsZone and commsZone.contains then
+        return commsZone:contains(GetEntityCoords(cache.ped))
+    end
+
     return #(GetEntityCoords(cache.ped) - Config.Zone.center) <= Config.Zone.radius
 end
 
@@ -312,23 +317,49 @@ local function isDowned()
     return IsPedDeadOrDying(cache.ped, true) or IsPedFatallyInjured(cache.ped)
 end
 
+local function destroyCommsZone()
+    if commsZone then
+        commsZone:remove()
+        commsZone = nil
+    end
+end
+
+local function ensureCommsZone()
+    if commsZone then return end
+
+    commsZone = lib.zones.sphere({
+        coords = Config.Zone.center,
+        radius = Config.Zone.radius,
+        debug = false,
+        onExit = function()
+            if not inComms or sweeping then return end
+            teleportTo(Config.StartCoords)
+            if not isDowned() then
+                TriggerServerEvent('dj-comms:server:escaped')
+            end
+        end,
+    })
+end
+
 local function startComms(data, opts)
     opts = opts or {}
     applyStatus(data)
     inComms = true
     sweeping = false
+    ensureCommsZone()
 
     if opts.teleport or (opts.enforceZone and not insideZone()) then
         teleportTo(Config.StartCoords)
     end
 
     rebuildTasks()
-    notify(('Community service started. Sweep %s spot(s). Follow the arrows.'):format(status.remaining), 'inform')
+    notify('started', 'inform', status.remaining)
 end
 
 local function stopComms(teleportOut)
     inComms = false
     sweeping = false
+    destroyCommsZone()
     clearTaskVisuals()
     status = {
         remaining = 0,
@@ -376,22 +407,6 @@ CreateThread(function()
     end
 end)
 
-CreateThread(function()
-    while true do
-        if inComms and not sweeping then
-            if not insideZone() then
-                teleportTo(Config.StartCoords)
-                if not isDowned() then
-                    TriggerServerEvent('dj-comms:server:escaped')
-                end
-            end
-            Wait(1000)
-        else
-            Wait(1500)
-        end
-    end
-end)
-
 RegisterNetEvent('dj-comms:client:start', function(data, opts)
     startComms(data, opts)
 end)
@@ -432,6 +447,7 @@ AddEventHandler('onResourceStop', function(resource)
     if resource ~= GetCurrentResourceName() then return end
 
     clearTaskVisuals()
+    destroyCommsZone()
 
     if statusPed and DoesEntityExist(statusPed) then
         exports.ox_target:removeLocalEntity(statusPed)

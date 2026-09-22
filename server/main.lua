@@ -1,14 +1,16 @@
 local sessions = {}
 local lastEscape = {}
 
-local function notify(src, description, nType)
+local function notify(src, key, nType, ...)
+    local description = locale(key, ...)
+
     if not src or src == 0 then
-        print(('[dj-comms] %s'):format(description))
+        lib.print.info(description)
         return
     end
 
-    TriggerClientEvent('ox_lib:notify', src, {
-        title = 'Community Service',
+    lib.notify(src, {
+        title = locale('notify_title'),
         description = description,
         type = nType or 'inform',
         duration = 7000,
@@ -173,7 +175,7 @@ local function finishSession(src, released)
     local total = session and session.total or 0
     local reason = session and session.reason or 'n/a'
 
-    notify(src, released and 'You have been released from community service.' or 'Community service complete. You are free to go.', 'success')
+    notify(src, released and 'released_player' or 'finished_player', 'success')
 
     sendWebhook(released and 'Player Released From Community Service' or 'Community Service Completed', released and 15105570 or 5763719, {
         { name = 'Player', value = ('%s (`%s`)'):format(playerName(player), src), inline = true },
@@ -191,18 +193,18 @@ local function sendToComms(adminSrc, targetSrc, amount, reason)
     reason = type(reason) == 'string' and reason:gsub('^%s+', ''):gsub('%s+$', '') or ''
 
     if amount < Config.MinTasks or amount > Config.MaxTasks then
-        notify(adminSrc, ('Task amount must be between %s and %s.'):format(Config.MinTasks, Config.MaxTasks), 'error')
+        notify(adminSrc, 'error_amount', 'error', Config.MinTasks, Config.MaxTasks)
         return false
     end
 
     if reason == '' then
-        notify(adminSrc, 'You must provide a reason.', 'error')
+        notify(adminSrc, 'error_reason', 'error')
         return false
     end
 
     local target = getPlayer(targetSrc)
     if not target then
-        notify(adminSrc, 'That player is not online.', 'error')
+        notify(adminSrc, 'error_offline', 'error')
         return false
     end
 
@@ -221,12 +223,12 @@ local function sendToComms(adminSrc, targetSrc, amount, reason)
         persistSession(targetSrc, session)
         assignActiveTasks(session)
         TriggerClientEvent('dj-comms:client:update', targetSrc, sessionPayload(session))
-        notify(targetSrc, ('More community service was added. %s tasks remaining.'):format(session.remaining), 'inform')
-        notify(adminSrc, ('Added %s tasks. %s now has %s remaining.'):format(amount, playerName(target), session.remaining), 'success')
+        notify(targetSrc, 'added_tasks_player', 'inform', session.remaining)
+        notify(adminSrc, 'added_tasks_admin', 'success', amount, playerName(target), session.remaining)
     else
         beginSession(targetSrc, amount, reason, sentBy, { teleport = true })
-        notify(targetSrc, ('You were sent to community service for %s tasks. Reason: %s'):format(amount, reason), 'error')
-        notify(adminSrc, ('Sent %s to community service for %s tasks.'):format(playerName(target), amount), 'success')
+        notify(targetSrc, 'sent_player', 'error', amount, reason)
+        notify(adminSrc, 'sent_admin', 'success', playerName(target), amount)
     end
 
     local ids = identifiers(targetSrc)
@@ -436,10 +438,10 @@ RegisterNetEvent('dj-comms:server:escaped', function()
         end
 
         persistSession(src, session)
-        notify(src, ('You cannot leave. %s extra task(s) added. %s remaining.'):format(extra, session.remaining), 'error')
+        notify(src, 'escape_penalty', 'error', extra, session.remaining)
         TriggerClientEvent('dj-comms:client:update', src, sessionPayload(session))
     else
-        notify(src, 'You cannot leave community service.', 'error')
+        notify(src, 'escape_blocked', 'error')
     end
 end)
 
@@ -481,11 +483,11 @@ AddEventHandler('onResourceStart', function(resource)
 end)
 
 lib.addCommand('sendcomms', {
-    help = 'Send a player to community service',
+    help = locale('cmd_send_help'),
     params = {
-        { name = 'id', type = 'playerId', help = 'Target server ID' },
-        { name = 'amount', type = 'number', help = 'Number of sweep tasks (1-150)' },
-        { name = 'reason', type = 'longString', help = 'Reason they are being sent' },
+        { name = 'id', type = 'playerId', help = locale('cmd_send_id') },
+        { name = 'amount', type = 'number', help = locale('cmd_send_amount') },
+        { name = 'reason', type = 'longString', help = locale('cmd_send_reason') },
     },
     restricted = Config.AdminGroup,
 }, function(source, args)
@@ -493,22 +495,22 @@ lib.addCommand('sendcomms', {
 end)
 
 lib.addCommand('removecomms', {
-    help = 'Release a player from community service',
+    help = locale('cmd_remove_help'),
     params = {
-        { name = 'id', type = 'playerId', help = 'Target server ID' },
+        { name = 'id', type = 'playerId', help = locale('cmd_send_id') },
     },
     restricted = Config.AdminGroup,
 }, function(source, args)
     local target = getPlayer(args.id)
     if not target then
-        notify(source, 'That player is not online.', 'error')
+        notify(source, 'error_offline', 'error')
         return
     end
 
     if not sessions[args.id] then
         local data = readMetadata(target)
         if not data or not data.active then
-            notify(source, 'That player is not in community service.', 'error')
+            notify(source, 'error_not_serving', 'error')
             return
         end
         sessions[args.id] = {
@@ -523,19 +525,19 @@ lib.addCommand('removecomms', {
     end
 
     finishSession(args.id, true)
-    notify(source, ('Released %s from community service.'):format(playerName(target)), 'success')
+    notify(source, 'released_admin', 'success', playerName(target))
 end)
 
 lib.addCommand('checkcomms', {
-    help = 'Check a player\'s community service progress',
+    help = locale('cmd_check_help'),
     params = {
-        { name = 'id', type = 'playerId', help = 'Target server ID' },
+        { name = 'id', type = 'playerId', help = locale('cmd_send_id') },
     },
     restricted = Config.AdminGroup,
 }, function(source, args)
     local target = getPlayer(args.id)
     if not target then
-        notify(source, 'That player is not online.', 'error')
+        notify(source, 'error_offline', 'error')
         return
     end
 
@@ -543,19 +545,19 @@ lib.addCommand('checkcomms', {
     if not session then
         local data = readMetadata(target)
         if not data or not data.active then
-            notify(source, 'That player is not in community service.', 'inform')
+            notify(source, 'error_not_serving', 'inform')
             return
         end
         session = data
     end
 
-    notify(source, ('%s: %s/%s done, %s left. Reason: %s'):format(
+    notify(source, 'check_status', 'inform',
         playerName(target),
         session.completed or 0,
         session.total or 0,
         session.remaining or 0,
         session.reason or 'n/a'
-    ), 'inform')
+    )
 end)
 
 exports('SendToComms', function(targetSrc, amount, reason, sentBy)
